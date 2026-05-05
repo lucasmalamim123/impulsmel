@@ -28,6 +28,7 @@ export async function middleware(request: NextRequest) {
   const isPublic =
     pathname.startsWith('/login') ||
     pathname.startsWith('/auth/callback') ||
+    pathname.startsWith('/brand') ||
     pathname.startsWith('/api/auth');
   if (!user && !isPublic) {
     return NextResponse.redirect(new URL('/login', request.url));
@@ -37,5 +38,5 @@ export async function middleware(request: NextRequest) {
 }
 
 export const config = {
-  matcher: ['/((?!_next/static|_next/image|favicon.ico|api/auth).*)'],
+  matcher: ['/((?!_next/static|_next/image|favicon.ico|brand|api/auth).*)'],
 };

@@ -25,7 +25,7 @@ export default async function TenantLayout({ children, params }: Props) {
     : 'Basic';
 
   return (
-    <div className="flex min-h-screen bg-[#f5f6fa]">
+    <div className="flex min-h-screen bg-[#f3f4f6]">
       <SidebarNav
         tenantSlug={params.tenantSlug}
         tenantName={meta?.name}
