@@ -19,8 +19,24 @@ export default async function ProfissionaisPage({ params }: Props) {
         .from('professionals')
         .select('*')
         .eq('tenant_id', tenant.id)
+        .eq('active', true)
         .order('name')
     : { data: [] };
+
+  const [{ data: services }, { data: professionalServices }] = tenant
+    ? await Promise.all([
+        supabase
+          .from('services')
+          .select('id, name, scheduling_mode, duration_minutes, active')
+          .eq('tenant_id', tenant.id)
+          .eq('active', true)
+          .order('name'),
+        supabase
+          .from('professional_services')
+          .select('professional_id, service_id, scheduling_mode, slot_capacity, active')
+          .eq('tenant_id', tenant.id),
+      ])
+    : [{ data: [] }, { data: [] }];
 
   return (
     <div className="space-y-6">
@@ -28,6 +44,8 @@ export default async function ProfissionaisPage({ params }: Props) {
       <ProfissionaisClient
         tenantSlug={params.tenantSlug}
         professionals={professionals ?? []}
+        services={services ?? []}
+        professionalServices={professionalServices ?? []}
       />
     </div>
   );

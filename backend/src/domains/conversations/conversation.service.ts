@@ -20,22 +20,27 @@ const initialState = (): ConversationState => ({
   idempotencyKey: randomUUID(),
 });
 
-export async function getOrCreateConversation(customerId: string, channel: string): Promise<Conversation> {
-  const existing = await findActiveByCustomer(customerId, channel);
+export async function getOrCreateConversation(
+  tenantId: string,
+  customerId: string,
+  channel: string,
+): Promise<Conversation> {
+  const existing = await findActiveByCustomer(tenantId, customerId, channel);
   if (existing) return existing;
-  return createConversation(customerId, channel, initialState());
+  return createConversation(tenantId, customerId, channel, initialState());
 }
 
 export async function ensureChatwootConversation(
   conversation: Conversation,
   phone: string,
   name?: string,
+  tenantId?: string,
 ): Promise<Conversation> {
   if (conversation.chatwoot_conversation_id) return conversation;
 
   try {
-    const contactId = await findOrCreateContact(phone, name);
-    const chatwootConversationId = await createChatwootConversation(contactId);
+    const contactId = await findOrCreateContact(phone, name, tenantId);
+    const chatwootConversationId = await createChatwootConversation(contactId, tenantId);
     await updateChatwootId(conversation.id, chatwootConversationId);
     return { ...conversation, chatwoot_conversation_id: chatwootConversationId };
   } catch {

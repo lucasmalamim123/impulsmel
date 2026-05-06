@@ -3,7 +3,13 @@ import { PromptContext, Profissional, ServicoInfo } from './ai.types';
 function formatProfissionais(profissionais: Profissional[]): string {
   if (!profissionais.length) return '(nenhum profissional cadastrado)';
   return profissionais
-    .map(p => `- ${p.nome} (apelidos: ${p.apelidos.join(', ')}): ${p.especialidades.join(', ')}`)
+    .map(p => {
+      const capacity = p.slotCapacity && p.slotCapacity > 1 ? `; capacidade por horario: ${p.slotCapacity}` : '';
+      const linkedServices = (p.servicos ?? [])
+        .map(s => `${s.nome} [${s.schedulingMode === 'group' ? `turma, ${s.slotCapacity} vagas` : 'individual'}]`);
+      const services = linkedServices.length ? linkedServices.join(', ') : p.especialidades.join(', ');
+      return `- ${p.nome} (apelidos: ${p.apelidos.join(', ')}${capacity}): ${services}`;
+    })
     .join('\n');
 }
 
@@ -14,6 +20,7 @@ function formatServicos(servicos: ServicoInfo[]): string {
       const flags: string[] = [];
       if (s.preco > 0) flags.push(`R$ ${s.preco.toFixed(2)}`);
       if (s.requerHumano) flags.push('REQUER HUMANO');
+      flags.push(s.schedulingMode === 'group' ? 'TURMA' : 'INDIVIDUAL');
       flags.push(`${s.duracaoMin}min`);
       return `- ${s.nome} (${flags.join(', ')})`;
     })
@@ -186,6 +193,16 @@ ${formatProfissionais(ctx.profissionais)}`,
 ${formatServicos(ctx.servicos)}`,
     STATIC_RULES,
   ];
+
+  if (ctx.extraRules?.trim()) {
+    staticParts.push(`REGRAS ESPECÍFICAS DESTE CLIENTE:
+${ctx.extraRules.trim()}`);
+  }
+
+  if (ctx.behaviorNotes?.trim()) {
+    staticParts.push(`COMPORTAMENTO CONFIGURADO PARA ESTE CLIENTE:
+${ctx.behaviorNotes.trim()}`);
+  }
 
   // ─── PARTE DINÂMICA (não cacheada — muda a cada chamada) ──────────────────
   const dynamicParts: string[] = [];

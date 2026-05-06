@@ -30,19 +30,32 @@ export interface Profissional {
   apelidos: string[];
   especialidades: string[];
   gcalCalendarId?: string;
-  businessHours?: Record<string, { open: string; close: string } | null>;
+  slotCapacity?: number;
+  businessHours?: Record<string, { open: string; close: string }[] | null>;
+  servicos?: ProfessionalServiceInfo[];
 }
 
 export interface ServicoInfo {
+  id?: string;
   nome: string;
   preco: number;
   duracaoMin: number;
   requerHumano: boolean;
+  schedulingMode: 'individual' | 'group';
+}
+
+export interface ProfessionalServiceInfo extends ServicoInfo {
+  professionalServiceId?: string;
+  serviceId: string;
+  slotCapacity: number;
+  active: boolean;
 }
 
 export interface PromptContext {
   assistantName: string;
   studioName: string;
+  extraRules?: string;
+  behaviorNotes?: string;
   profissionais: Profissional[];
   servicos: ServicoInfo[];
   conversationState: string;

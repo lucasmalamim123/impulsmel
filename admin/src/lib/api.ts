@@ -4,9 +4,13 @@ export async function apiFetch<T = unknown>(
   path: string,
   init?: RequestInit,
 ): Promise<T> {
+  const hasBody = init?.body !== undefined;
   const res = await fetch(`${BACKEND}${path}`, {
     ...init,
-    headers: { 'Content-Type': 'application/json', ...(init?.headers ?? {}) },
+    headers: {
+      ...(hasBody ? { 'Content-Type': 'application/json' } : {}),
+      ...(init?.headers ?? {}),
+    },
     cache: 'no-store',
   });
 
@@ -23,6 +27,6 @@ export const api = {
   post: <T>(path: string, body?: unknown) =>
     apiFetch<T>(path, { method: 'POST', body: JSON.stringify(body ?? {}) }),
   patch: <T>(path: string, body?: unknown) =>
-    apiFetch<T>(path, { method: 'PATCH', body: JSON.stringify(body) }),
+    apiFetch<T>(path, { method: 'PATCH', body: JSON.stringify(body ?? {}) }),
   del: <T>(path: string) => apiFetch<T>(path, { method: 'DELETE' }),
 };

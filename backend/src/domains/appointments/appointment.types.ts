@@ -1,18 +1,28 @@
 export type AppointmentStatus = 'pending' | 'confirmed' | 'cancelled' | 'rescheduled';
 
 export interface AppointmentRequest {
+  tenantId: string;
   customerId: string;
+  customerName?: string;
+  serviceId?: string;
   serviceType: string;
   requestedAt: string;
   idempotencyKey: string;
   durationMinutes?: number;
-  professionalCalendarId?: string; // calendário próprio do profissional ou compartilhado
+  professionalCalendarId?: string;
+  professionalId?: string;
   professionalName?: string;
+  schedulingMode?: 'individual' | 'group';
+  slotCapacity?: number;
 }
 
 export interface Appointment {
   id: string;
+  tenant_id: string;
   customer_id: string;
+  professional_id?: string;
+  professional_name?: string;
+  service_id?: string;
   service_type: string;
   scheduled_at: string;
   duration_minutes: number;

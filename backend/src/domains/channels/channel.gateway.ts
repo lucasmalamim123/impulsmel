@@ -17,8 +17,10 @@ import { chargeForAppointment } from '../payments/payment.service';
 import { sendMessage, assignAgent } from '../../integrations/chatwoot';
 import { sendWhatsAppMessage } from './whatsapp/whatsapp.sender';
 import { listSlotsForDay, formatSlotsForPrompt } from '../../integrations/google-calendar';
+import { countConfirmedForSlot } from '../appointments/appointment.repository';
 import { logIncident } from '../incidents/incident.service';
 import { pushToDLQ } from '../dlq/dlq.service';
+import { recordMessageEvent } from '../operational/operational.service';
 import {
   getDefaultTenantId,
   loadProfissionais,
@@ -27,7 +29,7 @@ import {
   getTenantScheduleConfig,
   getTenantPaymentConfig,
 } from '../tenants/tenant.service';
-import { BotResponse, Profissional } from '../ai/ai.types';
+import { BotResponse, Profissional, ServicoInfo } from '../ai/ai.types';
 import { ToolHandlers } from '../ai/tools';
 import { ConversationState } from '../conversations/conversation.types';
 
@@ -83,10 +85,51 @@ function findProfissional(nome: string | null, profissionais: Profissional[]): P
 
 function professionalCoversModality(prof: Profissional, modalidade: string): boolean {
   const target = modalidade.toLowerCase().trim();
-  return prof.especialidades.some(e => {
+  const specialtyMatch = prof.especialidades.some(e => {
     const esp = e.toLowerCase().trim();
     return esp === target || esp.includes(target) || target.includes(esp);
   });
+  const serviceMatch = (prof.servicos ?? []).some(s => {
+    const name = s.nome.toLowerCase().trim();
+    return name === target || name.includes(target) || target.includes(name);
+  });
+  return specialtyMatch || serviceMatch;
+}
+
+function findService(modalidade: string | null | undefined, servicos: ServicoInfo[]): ServicoInfo | undefined {
+  if (!modalidade) return undefined;
+  const target = modalidade.toLowerCase().trim();
+  return servicos.find(s => {
+    const name = s.nome.toLowerCase().trim();
+    return name === target || name.includes(target) || target.includes(name);
+  });
+}
+
+function resolveProfessionalServiceRule(
+  prof: Profissional | undefined,
+  service: ServicoInfo | undefined,
+): {
+  serviceId?: string;
+  serviceName?: string;
+  durationMinutes?: number;
+  schedulingMode: 'individual' | 'group';
+  slotCapacity: number;
+} {
+  const linked = prof?.servicos?.find(rule => {
+    if (service?.id && rule.serviceId === service.id) return true;
+    if (!service?.nome) return false;
+    const serviceName = service.nome.toLowerCase().trim();
+    const ruleName = rule.nome.toLowerCase().trim();
+    return ruleName === serviceName || ruleName.includes(serviceName) || serviceName.includes(ruleName);
+  });
+
+  return {
+    serviceId: linked?.serviceId ?? service?.id,
+    serviceName: linked?.nome ?? service?.nome,
+    durationMinutes: linked?.duracaoMin ?? service?.duracaoMin,
+    schedulingMode: linked?.schedulingMode ?? service?.schedulingMode ?? 'individual',
+    slotCapacity: Math.max(1, linked?.slotCapacity ?? (service?.schedulingMode === 'group' ? prof?.slotCapacity ?? 1 : 1)),
+  };
 }
 
 interface SideEffects {
@@ -109,7 +152,9 @@ function normalizeIsoDatetime(input: string): string {
 }
 
 function buildToolHandlers(deps: {
+  tenantId: string;
   profissionais: Profissional[];
+  servicos: ServicoInfo[];
   scheduleConfig: Awaited<ReturnType<typeof getTenantScheduleConfig>>;
   paymentConfig: Awaited<ReturnType<typeof getTenantPaymentConfig>>;
   identity: Awaited<ReturnType<typeof resolveIdentity>>;
@@ -118,7 +163,7 @@ function buildToolHandlers(deps: {
   conversationId: string;
   chatwootConversationId?: string;
 }): ToolHandlers {
-  const { profissionais, scheduleConfig, paymentConfig, identity, state, effects, conversationId, chatwootConversationId } = deps;
+  const { tenantId, profissionais, servicos, scheduleConfig, paymentConfig, identity, state, effects, conversationId, chatwootConversationId } = deps;
 
   const handlers: ToolHandlers = {
     async buscar_horarios({ profissional, dia }) {
@@ -127,15 +172,40 @@ function buildToolHandlers(deps: {
       const prof = findProfissional(profissional, profissionais);
       const calendarId = prof?.gcalCalendarId ?? scheduleConfig.sharedCalendarId;
       const businessHours = prof?.businessHours ?? scheduleConfig.businessHours;
+      const service = findService(state.modalidade, servicos);
+      const serviceRule = resolveProfessionalServiceRule(prof, service);
+      const isGroup = serviceRule.schedulingMode === 'group';
+      const slotCapacity = serviceRule.slotCapacity;
+      if (!calendarId) {
+        return 'ERRO: nenhum calendário foi configurado para este profissional nem para o tenant. Transfira para atendente e avise o operador para configurar Google Calendar.';
+      }
 
       try {
         const result = await listSlotsForDay(dia, {
+          tenantId,
           calendarId,
           durationMinutes: scheduleConfig.durationMinutes,
           slotIntervalMinutes: scheduleConfig.slotIntervalMinutes,
           businessHours,
           maxSlots: 20,
+          ignoreBusy: isGroup,
         });
+
+        if (isGroup && prof?.id && service) {
+          result.slots = (await Promise.all(result.slots.map(async slot => {
+            const occupied = await countConfirmedForSlot({
+              tenantId,
+              professionalId: prof.id,
+              serviceId: serviceRule.serviceId,
+              serviceType: serviceRule.serviceName ?? service.nome,
+              scheduledAt: slot.iso,
+            });
+            const remaining = slotCapacity - occupied;
+            return remaining > 0
+              ? { ...slot, label: `${slot.label} - ${remaining} ${remaining === 1 ? 'vaga disponivel' : 'vagas disponiveis'}` }
+              : null;
+          }))).filter((slot): slot is NonNullable<typeof slot> => Boolean(slot));
+        }
 
         if (!result.slots.length) {
           return `Sem vagas no dia ${dia} nem nos próximos 14 dias para ${profissional}. Sugira ao cliente outro profissional ou transfira para atendente humano.`;
@@ -161,16 +231,28 @@ function buildToolHandlers(deps: {
         return `ERRO: ${prof.nome} não atende ${modalidade}. Especialidades de ${prof.nome}: ${prof.especialidades.join(', ')}. Avise o cliente e pergunte se quer trocar de profissional ou modalidade. NÃO tente agendar de novo até o cliente decidir.`;
       }
       const normalizedIso = normalizeIsoDatetime(horario_iso);
+      const calendarId = prof?.gcalCalendarId ?? scheduleConfig.sharedCalendarId;
+      const service = findService(modalidade, servicos);
+      const serviceRule = resolveProfessionalServiceRule(prof, service);
+      if (!calendarId) {
+        return 'ERRO: nenhum calendário foi configurado para este profissional nem para o tenant. Transfira para atendente e avise o operador para configurar Google Calendar.';
+      }
       console.log('[AGENDAR_AULA]', { input: horario_iso, normalized: normalizedIso });
       try {
         const appointment = await scheduleAppointment({
+          tenantId,
           customerId: identity.id,
-          serviceType: modalidade,
+          customerName: identity.name ?? undefined,
+          serviceId: serviceRule.serviceId,
+          serviceType: serviceRule.serviceName ?? service?.nome ?? modalidade,
           requestedAt: normalizedIso,
           idempotencyKey: state.idempotencyKey,
-          durationMinutes: scheduleConfig.durationMinutes,
-          professionalCalendarId: prof?.gcalCalendarId ?? scheduleConfig.sharedCalendarId,
+          durationMinutes: serviceRule.durationMinutes ?? service?.duracaoMin ?? scheduleConfig.durationMinutes,
+          professionalCalendarId: calendarId,
+          professionalId: prof?.id,
           professionalName: prof?.nome,
+          schedulingMode: serviceRule.schedulingMode,
+          slotCapacity: serviceRule.slotCapacity,
         });
         effects.appointmentCreated = true;
         effects.appointmentId = appointment.id;
@@ -190,7 +272,7 @@ function buildToolHandlers(deps: {
 
     async consultar_meus_agendamentos() {
       try {
-        const list = await findUpcomingByCustomer(identity.id);
+        const list = await findUpcomingByCustomer(tenantId, identity.id);
         if (!list.length) return 'O cliente não tem agendamentos futuros.';
         const lines = list.map((a, i) => {
           const dt = new Date(a.scheduled_at);
@@ -206,7 +288,7 @@ function buildToolHandlers(deps: {
 
     async cancelar_agendamento({ appointment_id, motivo }) {
       try {
-        await cancelAppointment(appointment_id, identity.id, motivo);
+        await cancelAppointment(appointment_id, identity.id, motivo, tenantId);
         return `SUCESSO. Agendamento ${appointment_id} cancelado. Confirme ao cliente.`;
       } catch (err) {
         const msg = err instanceof Error ? err.message : String(err);
@@ -221,9 +303,15 @@ function buildToolHandlers(deps: {
         // Recupera o profissional/calendar do appointment original via lookup
         // (o calendarId não é guardado no appointment, então usamos o do estado atual ou primary)
         const prof = findProfissional(state.profissional, profissionais);
+        const service = findService(state.modalidade, servicos);
+        const serviceRule = resolveProfessionalServiceRule(prof, service);
         await rescheduleAppointment(appointment_id, identity.id, novo_horario_iso, {
+          tenantId,
           calendarId: prof?.gcalCalendarId ?? scheduleConfig.sharedCalendarId,
+          professionalId: prof?.id,
           professionalName: prof?.nome,
+          schedulingMode: serviceRule.schedulingMode,
+          slotCapacity: serviceRule.slotCapacity,
         });
         return `SUCESSO. Agendamento movido para ${novo_horario_iso}. Confirme ao cliente.`;
       } catch (err) {
@@ -240,7 +328,7 @@ function buildToolHandlers(deps: {
       effects.handoff = true;
       try {
         await transferToHuman(conversationId, state);
-        if (chatwootConversationId) await assignAgent(chatwootConversationId).catch(() => {});
+        if (chatwootConversationId) await assignAgent(chatwootConversationId, tenantId).catch(() => {});
         return `Transferência iniciada. Motivo: ${motivo}. Diga ao cliente que um atendente vai falar com ele em breve.`;
       } catch (err) {
         return `ERRO ao transferir: ${err instanceof Error ? err.message : String(err)}.`;
@@ -258,6 +346,7 @@ function buildToolHandlers(deps: {
       effects.paymentRequested = true;
       try {
         await chargeForAppointment(
+          tenantId,
           identity.id,
           effects.appointmentId,
           valor,
@@ -293,14 +382,23 @@ export async function handleIncomingMessage(
 ): Promise<ChannelGatewayResult | null> {
   try {
     const tenantId = options.tenantId ?? await getDefaultTenantId();
+    await recordMessageEvent({
+      tenantId,
+      direction: 'received',
+      messageType: msg.media?.type ?? (msg.text?.startsWith('http') ? 'link' : 'text'),
+      channel: msg.channel,
+      externalEventId: msg.id,
+      metadata: { from: msg.from },
+    });
+
     const identity = await resolveIdentity(msg.from, msg.channel, undefined, tenantId);
 
-    let conversation = await getOrCreateConversation(identity.id, msg.channel);
+    let conversation = await getOrCreateConversation(tenantId, identity.id, msg.channel);
     if (conversation.status === 'human') return null;
 
     if (!options.skipExternalDelivery) {
       conversation = await ensureChatwootConversation(
-        conversation, identity.phoneNormalized, identity.name,
+        conversation, identity.phoneNormalized, identity.name, tenantId,
       );
     }
 
@@ -312,7 +410,7 @@ export async function handleIncomingMessage(
       idempotency_key: msg.id,
     });
 
-    const [ragContext, conversationHistory, profissionais, servicos, assistantName, studioName, scheduleConfig, paymentConfig] =
+    const [ragContext, conversationHistory, profissionais, servicos, assistantName, studioName, extraRules, behaviorNotes, scheduleConfig, paymentConfig] =
       await Promise.all([
         shouldRetrieveRagContext(msg.text) ? retrieveContext(tenantId, msg.text) : Promise.resolve(''),
         getRecentMessages(conversation.id, 10),
@@ -320,6 +418,8 @@ export async function handleIncomingMessage(
         loadServices(tenantId),
         getTenantConfigValue(tenantId, 'bot.name'),
         getTenantConfigValue(tenantId, 'bot.studio_name'),
+        getTenantConfigValue(tenantId, 'bot.extra_rules'),
+        getTenantConfigValue(tenantId, 'bot.behavior_notes'),
         getTenantScheduleConfig(tenantId),
         getTenantPaymentConfig(tenantId),
       ]);
@@ -331,7 +431,9 @@ export async function handleIncomingMessage(
     console.log('[TENANT_FEATURES]', { paymentEnabled: paymentConfig.enabled, environment: paymentConfig.environment });
 
     const handlers = buildToolHandlers({
+      tenantId,
       profissionais,
+      servicos,
       scheduleConfig,
       paymentConfig,
       identity,
@@ -346,6 +448,8 @@ export async function handleIncomingMessage(
       {
         assistantName: assistantName ?? 'Sofia',
         studioName: studioName ?? 'Studio',
+        extraRules,
+        behaviorNotes,
         profissionais,
         servicos,
         conversationState: JSON.stringify(conversation.context),
@@ -410,7 +514,7 @@ export async function handleIncomingMessage(
     // Envio da mensagem
     if (!options.skipExternalDelivery && msg.channel === 'whatsapp') {
       try {
-        await sendWhatsAppMessage(msg.from, botResponse.message);
+        await sendWhatsAppMessage(msg.from, botResponse.message, tenantId);
       } catch (sendErr: unknown) {
         const errData = (sendErr as { response?: { status?: number; data?: unknown } })?.response;
         console.error('[WA_SEND_ERROR]', {
@@ -423,7 +527,7 @@ export async function handleIncomingMessage(
     }
 
     if (!options.skipExternalDelivery && conversation.chatwoot_conversation_id) {
-      await sendMessage(conversation.chatwoot_conversation_id, botResponse.message).catch(() => {});
+      await sendMessage(conversation.chatwoot_conversation_id, botResponse.message, tenantId).catch(() => {});
     }
 
     await saveMessage({
@@ -431,6 +535,14 @@ export async function handleIncomingMessage(
       role: 'assistant',
       content: botResponse.message,
       channel: msg.channel,
+    });
+
+    await recordMessageEvent({
+      tenantId,
+      direction: 'sent',
+      messageType: 'text',
+      channel: msg.channel,
+      metadata: { conversationId: conversation.id },
     });
 
     return {
@@ -442,8 +554,8 @@ export async function handleIncomingMessage(
       effects,
     };
   } catch (err) {
-    await pushToDLQ('incoming_message', msg, err instanceof Error ? err.message : String(err));
-    await logIncident('high', 'channel_gateway_error', String(err));
+    await pushToDLQ('incoming_message', msg, err instanceof Error ? err.message : String(err), options.tenantId);
+    await logIncident('high', 'channel_gateway_error', String(err), undefined, options.tenantId);
     if (options.throwOnError) throw err;
     return null;
   }

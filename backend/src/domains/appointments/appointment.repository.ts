@@ -12,10 +12,11 @@ export async function createAppointment(data: Omit<Appointment, 'id' | 'created_
   return appointment;
 }
 
-export async function findByIdempotencyKey(key: string): Promise<Appointment | null> {
+export async function findByIdempotencyKey(tenantId: string, key: string): Promise<Appointment | null> {
   const { data, error } = await supabase
     .from('appointments')
     .select('*')
+    .eq('tenant_id', tenantId)
     .eq('idempotency_key', key)
     .single();
 
@@ -33,23 +34,27 @@ export async function updateStatus(id: string, status: AppointmentStatus, gcalEv
   if (error) throw error;
 }
 
-export async function findById(id: string): Promise<Appointment | null> {
-  const { data, error } = await supabase
+export async function findById(id: string, tenantId?: string): Promise<Appointment | null> {
+  let query = supabase
     .from('appointments')
     .select('*')
-    .eq('id', id)
-    .single();
+    .eq('id', id);
+
+  if (tenantId) query = query.eq('tenant_id', tenantId);
+
+  const { data, error } = await query.single();
 
   if (error?.code === 'PGRST116') return null;
   if (error) throw error;
   return data;
 }
 
-export async function findUpcomingByCustomer(customerId: string): Promise<Appointment[]> {
+export async function findUpcomingByCustomer(tenantId: string, customerId: string): Promise<Appointment[]> {
   const now = new Date().toISOString();
   const { data, error } = await supabase
     .from('appointments')
     .select('*')
+    .eq('tenant_id', tenantId)
     .eq('customer_id', customerId)
     .in('status', ['confirmed', 'pending'])
     .gte('scheduled_at', now)
@@ -68,4 +73,31 @@ export async function acquireLock(id: string, durationMs: number): Promise<boole
     .or(`locked_until.is.null,locked_until.lt.${new Date().toISOString()}`);
 
   return !error;
+}
+
+export async function countConfirmedForSlot(params: {
+  tenantId: string;
+  professionalId: string;
+  serviceId?: string;
+  serviceType: string;
+  scheduledAt: string;
+  excludeAppointmentId?: string;
+}): Promise<number> {
+  let query = supabase
+    .from('appointments')
+    .select('id', { count: 'exact', head: true })
+    .eq('tenant_id', params.tenantId)
+    .eq('professional_id', params.professionalId)
+    .eq('scheduled_at', params.scheduledAt)
+    .eq('status', 'confirmed');
+
+  query = params.serviceId
+    ? query.eq('service_id', params.serviceId)
+    : query.eq('service_type', params.serviceType);
+
+  if (params.excludeAppointmentId) query = query.neq('id', params.excludeAppointmentId);
+
+  const { count, error } = await query;
+  if (error) throw error;
+  return count ?? 0;
 }

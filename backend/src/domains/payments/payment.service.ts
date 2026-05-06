@@ -9,6 +9,7 @@ import { createCharge } from '../../integrations/asaas';
 import { logAudit } from '../audit/audit.service';
 
 export async function chargeForAppointment(
+  tenantId: string,
   customerId: string,
   appointmentId: string,
   amount: number,
@@ -16,10 +17,11 @@ export async function chargeForAppointment(
   customerName: string,
   customerPhone: string,
 ): Promise<Payment> {
-  const existing = await findByIdempotencyKey(idempotencyKey);
+  const existing = await findByIdempotencyKey(tenantId, idempotencyKey);
   if (existing) return existing;
 
   const charge = await createCharge({
+    tenantId,
     customerId,
     customerName,
     customerPhone,
@@ -28,6 +30,7 @@ export async function chargeForAppointment(
   });
 
   const payment = await createPayment({
+    tenant_id: tenantId,
     customer_id: customerId,
     appointment_id: appointmentId,
     asaas_charge_id: charge.id,
@@ -37,6 +40,7 @@ export async function chargeForAppointment(
   });
 
   await logAudit({
+    tenant_id: tenantId,
     entity_type: 'payment',
     entity_id: payment.id,
     action: 'created',
@@ -65,6 +69,7 @@ export async function handleAsaasWebhook(asaasChargeId: string, event: string): 
   await updateStatusByAsaasId(asaasChargeId, status);
 
   await logAudit({
+    tenant_id: before.tenant_id,
     entity_type: 'payment',
     entity_id: before.id,
     action: 'updated',

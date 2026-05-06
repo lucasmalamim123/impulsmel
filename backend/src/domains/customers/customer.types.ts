@@ -1,5 +1,6 @@
 export interface CustomerIdentity {
   id: string;
+  tenantId: string;
   isNew: boolean;
   phoneNormalized: string;
   name?: string;
@@ -8,6 +9,7 @@ export interface CustomerIdentity {
 
 export interface Customer {
   id: string;
+  tenant_id: string;
   phone_normalized: string;
   email?: string;
   name?: string;

@@ -1,0 +1,28 @@
+export default function Loading() {
+  return (
+    <div className="min-h-screen bg-[#f3f4f6] p-8">
+      <div className="mx-auto max-w-6xl space-y-6">
+        <div className="space-y-2">
+          <div className="loading-skeleton h-4 w-28 rounded" />
+          <div className="loading-skeleton h-8 w-72 rounded" />
+        </div>
+        <div className="grid gap-4 md:grid-cols-4">
+          {Array.from({ length: 4 }).map((_, index) => (
+            <div key={index} className="rounded-lg border border-[#e5e7eb] bg-white p-5">
+              <div className="loading-skeleton h-3 w-24 rounded" />
+              <div className="loading-skeleton mt-4 h-8 w-16 rounded" />
+            </div>
+          ))}
+        </div>
+        <div className="rounded-lg border border-[#e5e7eb] bg-white p-5">
+          <div className="loading-skeleton h-5 w-40 rounded" />
+          <div className="mt-5 space-y-3">
+            {Array.from({ length: 6 }).map((_, index) => (
+              <div key={index} className="loading-skeleton h-10 rounded" />
+            ))}
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}

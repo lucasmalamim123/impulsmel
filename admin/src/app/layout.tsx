@@ -1,5 +1,7 @@
 import type { Metadata } from 'next';
 import { Inter, Poppins } from 'next/font/google';
+import { Suspense } from 'react';
+import { NavigationFeedback } from '../components/navigation/NavigationFeedback';
 import './globals.css';
 
 const inter = Inter({ subsets: ['latin'], variable: '--font-inter' });
@@ -16,7 +18,12 @@ export const metadata: Metadata = {
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
     <html lang="pt-BR" suppressHydrationWarning>
-      <body className={`${inter.variable} ${poppins.variable} font-sans`}>{children}</body>
+      <body className={`${inter.variable} ${poppins.variable} font-sans`}>
+        <Suspense fallback={null}>
+          <NavigationFeedback />
+        </Suspense>
+        {children}
+      </body>
     </html>
   );
 }

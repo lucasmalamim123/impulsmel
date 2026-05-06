@@ -33,10 +33,11 @@ export async function findByAsaasId(asaasChargeId: string): Promise<Payment | nu
   return data;
 }
 
-export async function findByIdempotencyKey(key: string): Promise<Payment | null> {
+export async function findByIdempotencyKey(tenantId: string, key: string): Promise<Payment | null> {
   const { data, error } = await supabase
     .from('payments')
     .select('*')
+    .eq('tenant_id', tenantId)
     .eq('idempotency_key', key)
     .single();
 

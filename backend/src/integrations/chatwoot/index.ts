@@ -1,12 +1,34 @@
 import axios, { AxiosError } from 'axios';
+import { getTenantConfigValue } from '../../domains/tenants/tenant.service';
 
-const client = axios.create({
-  baseURL: `${(process.env.CHATWOOT_API_URL ?? '').replace(/\/$/, '')}/api/v1`,
-  headers: { api_access_token: process.env.CHATWOOT_API_KEY },
-});
+async function getChatwootConfig(tenantId?: string) {
+  const [apiUrl, apiKey, accountId, inboxId] = tenantId
+    ? await Promise.all([
+        getTenantConfigValue(tenantId, 'chatwoot.api_url'),
+        getTenantConfigValue(tenantId, 'chatwoot.api_key'),
+        getTenantConfigValue(tenantId, 'chatwoot.account_id'),
+        getTenantConfigValue(tenantId, 'chatwoot.inbox_id'),
+      ])
+    : [undefined, undefined, undefined, undefined];
 
-const accountId = () => Number(process.env.CHATWOOT_ACCOUNT_ID);
-const inboxId = () => Number(process.env.CHATWOOT_INBOX_ID);
+  return {
+    apiUrl: apiUrl ?? process.env.CHATWOOT_API_URL ?? '',
+    apiKey: apiKey ?? process.env.CHATWOOT_API_KEY,
+    accountId: Number(accountId ?? process.env.CHATWOOT_ACCOUNT_ID),
+    inboxId: Number(inboxId ?? process.env.CHATWOOT_INBOX_ID),
+  };
+}
+
+async function createClient(tenantId?: string) {
+  const config = await getChatwootConfig(tenantId);
+  return {
+    config,
+    client: axios.create({
+      baseURL: `${config.apiUrl.replace(/\/$/, '')}/api/v1`,
+      headers: { api_access_token: config.apiKey },
+    }),
+  };
+}
 
 function logChatwootError(fn: string, err: unknown): never {
   const e = err as AxiosError;
@@ -15,16 +37,26 @@ function logChatwootError(fn: string, err: unknown): never {
   throw err;
 }
 
-export async function sendMessage(conversationId: string, content: string): Promise<void> {
+export async function sendMessage(
+  conversationId: string,
+  content: string,
+  tenantId?: string,
+): Promise<void> {
+  const { client, config } = await createClient(tenantId);
   await client.post(
-    `/accounts/${accountId()}/conversations/${conversationId}/messages`,
+    `/accounts/${config.accountId}/conversations/${conversationId}/messages`,
     { content, message_type: 'outgoing', private: false },
   ).catch(e => logChatwootError('sendMessage', e));
 }
 
-export async function findOrCreateContact(phone: string, name?: string): Promise<string> {
+export async function findOrCreateContact(
+  phone: string,
+  name?: string,
+  tenantId?: string,
+): Promise<string> {
+  const { client, config } = await createClient(tenantId);
   const searchRes = await client
-    .get(`/accounts/${accountId()}/contacts/search`, {
+    .get(`/accounts/${config.accountId}/contacts/search`, {
       params: { q: phone, include_contacts: true },
     })
     .catch(e => logChatwootError('contacts/search', e));
@@ -34,7 +66,7 @@ export async function findOrCreateContact(phone: string, name?: string): Promise
   if (existing?.id) return String(existing.id);
 
   const createRes = await client
-    .post(`/accounts/${accountId()}/contacts`, {
+    .post(`/accounts/${config.accountId}/contacts`, {
       phone_number: phone,
       name: name ?? phone,
     })
@@ -43,19 +75,24 @@ export async function findOrCreateContact(phone: string, name?: string): Promise
   return String(createRes.data.id);
 }
 
-export async function createChatwootConversation(contactId: string): Promise<string> {
+export async function createChatwootConversation(
+  contactId: string,
+  tenantId?: string,
+): Promise<string> {
+  const { client, config } = await createClient(tenantId);
   const res = await client
-    .post(`/accounts/${accountId()}/conversations`, {
+    .post(`/accounts/${config.accountId}/conversations`, {
       contact_id: Number(contactId),
-      inbox_id: inboxId(),
+      inbox_id: config.inboxId,
     })
     .catch(e => logChatwootError('conversations/create', e));
 
   return String(res.data.id);
 }
 
-export async function assignAgent(conversationId: string): Promise<void> {
+export async function assignAgent(conversationId: string, tenantId?: string): Promise<void> {
+  const { client, config } = await createClient(tenantId);
   await client
-    .post(`/accounts/${accountId()}/conversations/${conversationId}/assignments`, {})
+    .post(`/accounts/${config.accountId}/conversations/${conversationId}/assignments`, {})
     .catch(() => {});
 }

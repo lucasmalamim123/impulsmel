@@ -1,6 +1,7 @@
 export const dynamic = 'force-dynamic';
 
 import Link from 'next/link';
+import { TenantMetricCharts } from '../../../components/charts/TenantMetricCharts';
 import { api } from '../../../lib/api';
 import { createAdminClient } from '../../../lib/supabase/admin-client';
 
@@ -8,11 +9,18 @@ interface Props { params: { tenantSlug: string } }
 
 interface Metrics {
   conversations: number;
+  activeConversations: number;
+  realTimeAttendances: number;
   appointments: number;
+  confirmedAppointments: number;
+  cancelledAppointments: number;
   handoffs: number;
+  botResolutionRate: number;
+  humanTransferRate: number;
   dlqPending: number;
   professionalsCount: number;
   lastRagSync?: string | null;
+  monthlySeries: Array<{ day: string; conversations: number; appointments: number; handoffs: number; dlq: number }>;
 }
 
 interface WaStatus {
@@ -89,16 +97,19 @@ export default async function TenantDashboard({ params }: Props) {
     tenantId
       ? api.get<Metrics>(`/api/tenants/${tenantId}/metrics`).catch((): Metrics => ({
           conversations: 0, appointments: 0, handoffs: 0,
-          dlqPending: 0, professionalsCount: 0, lastRagSync: null,
+          activeConversations: 0, realTimeAttendances: 0, confirmedAppointments: 0, cancelledAppointments: 0,
+          botResolutionRate: 0, humanTransferRate: 0, dlqPending: 0, professionalsCount: 0, lastRagSync: null, monthlySeries: [],
         }))
-      : ({ conversations: 0, appointments: 0, handoffs: 0, dlqPending: 0, professionalsCount: 0, lastRagSync: null } as Metrics),
-    api.get<WaStatus>('/api/whatsapp/status').catch((): WaStatus => ({ connected: false })),
+      : ({ conversations: 0, activeConversations: 0, realTimeAttendances: 0, appointments: 0, confirmedAppointments: 0, cancelledAppointments: 0, handoffs: 0, botResolutionRate: 0, humanTransferRate: 0, dlqPending: 0, professionalsCount: 0, lastRagSync: null, monthlySeries: [] } as Metrics),
+    tenantId
+      ? api.get<WaStatus>(`/api/tenants/${tenantId}/whatsapp/status`).catch((): WaStatus => ({ connected: false }))
+      : ({ connected: false } as WaStatus),
   ]);
 
   const waDisconnectedMins = minutesSince(waStatus.disconnectedSince);
 
   return (
-    <div className="max-w-5xl space-y-6">
+    <div className="w-full space-y-6">
       <div className="flex items-center justify-between">
         <div>
           <p className="brand-eyebrow mb-1">Operação</p>
@@ -134,7 +145,7 @@ export default async function TenantDashboard({ params }: Props) {
             <Link href={`/${params.tenantSlug}/integracoes`} className="text-xs px-3 py-1.5 rounded-lg bg-white/8 text-white/75 hover:bg-white/12 transition-colors">
               Ver integrações
             </Link>
-            <Link href={`/${params.tenantSlug}/integracoes/whatsapp`} className="text-xs px-3 py-1.5 rounded-lg bg-[#d91e2e] text-white hover:bg-[#b91523] transition-colors font-semibold">
+            <Link href={`/${params.tenantSlug}/integracoes`} className="text-xs px-3 py-1.5 rounded-lg bg-[#d91e2e] text-white hover:bg-[#b91523] transition-colors font-semibold">
               Reconectar
             </Link>
           </div>
@@ -155,6 +166,26 @@ export default async function TenantDashboard({ params }: Props) {
           <StatCard label="Agendamentos" value={metrics?.appointments ?? 0} href={`/${params.tenantSlug}/auditoria`} />
           <StatCard label="Handoffs" value={metrics?.handoffs ?? 0} href={`/${params.tenantSlug}/auditoria`} />
           <StatCard label="Erros na fila" value={metrics?.dlqPending ?? 0} href={`/${params.tenantSlug}/dlq`} warn />
+        </div>
+      </div>
+
+      <div>
+        <p className="brand-eyebrow mb-3">Operação em tempo real</p>
+        <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+          <StatCard label="Conversas em andamento" value={metrics?.activeConversations ?? 0} href={`/${params.tenantSlug}/auditoria`} />
+          <StatCard label="Atendimentos humanos" value={metrics?.realTimeAttendances ?? 0} href={`/${params.tenantSlug}/auditoria`} />
+          <StatCard label="Resolução pelo bot" value={`${metrics?.botResolutionRate ?? 0}%`} href={`/${params.tenantSlug}/auditoria`} />
+          <StatCard label="Transferência humana" value={`${metrics?.humanTransferRate ?? 0}%`} href={`/${params.tenantSlug}/auditoria`} />
+        </div>
+      </div>
+
+      <TenantMetricCharts data={metrics?.monthlySeries ?? []} />
+
+      <div>
+        <p className="brand-eyebrow mb-3">Agendamentos</p>
+        <div className="grid grid-cols-2 gap-4">
+          <StatCard label="Concluídos" value={metrics?.confirmedAppointments ?? 0} href={`/${params.tenantSlug}/auditoria?type=appointment`} />
+          <StatCard label="Cancelados" value={metrics?.cancelledAppointments ?? 0} href={`/${params.tenantSlug}/auditoria?type=appointment`} warn />
         </div>
       </div>
 

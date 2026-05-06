@@ -17,11 +17,12 @@ export async function createProfissional(slug: string, formData: FormData) {
   const aliases = (formData.get('aliases') as string).split(',').map(s => s.trim()).filter(Boolean);
   const specialties = (formData.get('specialties') as string).split(',').map(s => s.trim()).filter(Boolean);
   const gcal = (formData.get('gcal_calendar_id') as string) || undefined;
+  const slot_capacity = Math.max(1, Number(formData.get('slot_capacity')) || 1);
   const businessHoursRaw = formData.get('business_hours') as string | null;
   const business_hours = businessHoursRaw ? JSON.parse(businessHoursRaw) : null;
 
   await api.post(`/api/tenants/${tenantId}/professionals`, {
-    name, aliases, specialties, gcal_calendar_id: gcal, business_hours,
+    name, aliases, specialties, gcal_calendar_id: gcal, slot_capacity, business_hours,
   });
 
   revalidatePath(`/${slug}/profissionais`);
@@ -33,6 +34,12 @@ export async function toggleProfissional(slug: string, id: string, active: boole
   revalidatePath(`/${slug}/profissionais`);
 }
 
+export async function deleteProfissional(slug: string, id: string) {
+  const tenantId = await getTenantId(slug);
+  await api.del(`/api/tenants/${tenantId}/professionals/${id}`);
+  revalidatePath(`/${slug}/profissionais`);
+}
+
 export async function updateProfissional(
   slug: string,
   id: string,
@@ -41,7 +48,14 @@ export async function updateProfissional(
     aliases: string[];
     specialties: string[];
     gcal_calendar_id?: string;
-    business_hours?: Record<string, { open: string; close: string } | null>;
+    slot_capacity?: number;
+    business_hours?: Record<string, { open: string; close: string }[] | null>;
+    serviceRules?: Array<{
+      service_id: string;
+      scheduling_mode: 'individual' | 'group';
+      slot_capacity: number;
+      active: boolean;
+    }>;
   },
 ) {
   const tenantId = await getTenantId(slug);

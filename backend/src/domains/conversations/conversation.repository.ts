@@ -1,10 +1,15 @@
 import { supabase } from '../../lib/supabase';
 import { Conversation, ConversationState, ConversationStatus } from './conversation.types';
 
-export async function findActiveByCustomer(customerId: string, channel: string): Promise<Conversation | null> {
+export async function findActiveByCustomer(
+  tenantId: string,
+  customerId: string,
+  channel: string,
+): Promise<Conversation | null> {
   const { data, error } = await supabase
     .from('conversations')
     .select('*')
+    .eq('tenant_id', tenantId)
     .eq('customer_id', customerId)
     .eq('channel', channel)
     .neq('status', 'closed')
@@ -17,10 +22,15 @@ export async function findActiveByCustomer(customerId: string, channel: string):
   return data;
 }
 
-export async function createConversation(customerId: string, channel: string, context: ConversationState): Promise<Conversation> {
+export async function createConversation(
+  tenantId: string,
+  customerId: string,
+  channel: string,
+  context: ConversationState,
+): Promise<Conversation> {
   const { data, error } = await supabase
     .from('conversations')
-    .insert({ customer_id: customerId, channel, context })
+    .insert({ tenant_id: tenantId, customer_id: customerId, channel, context })
     .select()
     .single();
 

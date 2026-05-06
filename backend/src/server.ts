@@ -10,7 +10,11 @@ import { ragSyncWorker, ragSyncQueue } from './jobs/rag-sync.job';
 import { reminderWorker } from './jobs/reminder.job';
 import { dlqRetryWorker, dlqRetryQueue } from './jobs/dlq-retry.job';
 import { whatsappMonitorWorker, whatsappMonitorQueue } from './jobs/whatsapp-monitor.job';
-import { getTenantRagSyncIntervalHours, listActiveTenantIds } from './domains/tenants/tenant.service';
+import {
+  getTenantFeatureFlag,
+  getTenantRagSyncIntervalHours,
+  listActiveTenantIds,
+} from './domains/tenants/tenant.service';
 
 const app = Fastify({
   logger: {
@@ -27,15 +31,21 @@ app.register(metaWebhookRoutes);
 app.register(adminDlqRoutes);
 app.register(adminApiRoutes);
 
-app.get('/health', async () => ({
-  ok: true,
-  workers: ['rag-sync', 'reminders', 'dlq-retry', 'whatsapp-monitor'],
-  features: {
-    instagram: process.env.FEATURE_INSTAGRAM_ENABLED === 'true',
-    messenger: process.env.FEATURE_MESSENGER_ENABLED === 'true',
-    tiktok: process.env.FEATURE_TIKTOK_ENABLED === 'true',
-  },
-}));
+app.get('/health', async () => {
+  const tenantIds = await listActiveTenantIds().catch(() => []);
+  const features = await Promise.all(tenantIds.map(async tenantId => ({
+    tenantId,
+    instagram: await getTenantFeatureFlag(tenantId, 'feature.instagram_enabled'),
+    messenger: await getTenantFeatureFlag(tenantId, 'feature.messenger_enabled'),
+    tiktok: await getTenantFeatureFlag(tenantId, 'feature.tiktok_enabled'),
+  })));
+
+  return {
+    ok: true,
+    workers: ['rag-sync', 'reminders', 'dlq-retry', 'whatsapp-monitor'],
+    features,
+  };
+});
 
 const start = async () => {
   try {

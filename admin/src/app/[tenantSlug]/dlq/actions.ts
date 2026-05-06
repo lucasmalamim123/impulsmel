@@ -8,12 +8,18 @@ export async function replayOne(slug: string, id: string) {
   revalidatePath(`/${slug}/dlq`);
 }
 
-export async function replayAll(slug: string) {
-  await api.post('/admin/dlq/replay-all');
+export async function replayAll(slug: string, tenantId?: string) {
+  await api.post('/admin/dlq/replay-all', { tenantId });
   revalidatePath(`/${slug}/dlq`);
 }
 
 export async function discardOne(slug: string, id: string) {
   await api.patch(`/admin/dlq/${id}/discard`);
+  revalidatePath(`/${slug}/dlq`);
+}
+
+export async function simulateDlq(slug: string, tenantId?: string) {
+  if (!tenantId) return;
+  await api.post('/admin/dlq/simulate', { tenantId });
   revalidatePath(`/${slug}/dlq`);
 }

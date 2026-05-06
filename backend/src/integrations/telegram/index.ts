@@ -1,32 +1,39 @@
 import axios from 'axios';
+import { getTenantConfigValue } from '../../domains/tenants/tenant.service';
 
-const base = () => `https://api.telegram.org/bot${process.env.TELEGRAM_BOT_TOKEN}`;
-const chatId = () => process.env.TELEGRAM_ALERT_CHAT_ID;
+async function getTelegramConfig(tenantId?: string) {
+  const [botToken, alertChatId] = tenantId
+    ? await Promise.all([
+        getTenantConfigValue(tenantId, 'telegram.bot_token'),
+        getTenantConfigValue(tenantId, 'telegram.alert_chat_id'),
+      ])
+    : [undefined, undefined];
 
-export async function sendTelegramAlert(message: string): Promise<void> {
-  if (!process.env.TELEGRAM_BOT_TOKEN || !chatId()) return;
-
-  await axios.post(`${base()}/sendMessage`, {
-    chat_id: chatId(),
-    text: message,
-    parse_mode: 'Markdown',
-  }).catch(() => {});
+  return {
+    botToken: botToken ?? process.env.TELEGRAM_BOT_TOKEN,
+    alertChatId: alertChatId ?? process.env.TELEGRAM_ALERT_CHAT_ID,
+  };
 }
 
-export async function sendTelegramPhoto(caption: string, photoBase64: string): Promise<void> {
-  if (!process.env.TELEGRAM_BOT_TOKEN || !chatId()) return;
+export async function sendTelegramAlert(text: string, tenantId?: string): Promise<void> {
+  const config = await getTelegramConfig(tenantId);
+  if (!config.botToken || !config.alertChatId) return;
 
-  try {
-    const raw = photoBase64.replace(/^data:image\/\w+;base64,/, '');
-    const buffer = Buffer.from(raw, 'base64');
+  await axios.post(`https://api.telegram.org/bot${config.botToken}/sendMessage`, {
+    chat_id: config.alertChatId,
+    text,
+    parse_mode: 'Markdown',
+  });
+}
 
-    const form = new FormData();
-    form.append('chat_id', chatId()!);
-    form.append('caption', caption);
-    form.append('photo', new Blob([buffer], { type: 'image/png' }), 'qrcode.png');
+export async function sendTelegramPhoto(caption: string, photo: string, tenantId?: string): Promise<void> {
+  const config = await getTelegramConfig(tenantId);
+  if (!config.botToken || !config.alertChatId) return;
 
-    await fetch(`${base()}/sendPhoto`, { method: 'POST', body: form });
-  } catch {
-    await sendTelegramAlert(caption);
-  }
+  await axios.post(`https://api.telegram.org/bot${config.botToken}/sendPhoto`, {
+    chat_id: config.alertChatId,
+    photo,
+    caption,
+    parse_mode: 'Markdown',
+  });
 }

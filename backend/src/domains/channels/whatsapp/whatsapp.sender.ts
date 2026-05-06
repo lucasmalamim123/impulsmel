@@ -1,11 +1,31 @@
-import { megaApi } from '../../../integrations/megaapi';
+import { createMegaApiClient } from '../../../integrations/megaapi';
+import { upsertIntegrationStatus } from '../../operational/operational.service';
 
-export async function sendWhatsAppMessage(to: string, text: string): Promise<void> {
-  const path = `/rest/sendMessage/${process.env.MEGAAPI_INSTANCE_KEY}/text`;
-  // MegaAPI espera o número com sufixo @s.whatsapp.net
+export async function sendWhatsAppMessage(
+  to: string,
+  text: string,
+  tenantId?: string,
+): Promise<void> {
+  const { client, config } = await createMegaApiClient(tenantId);
+  if (!config.instanceKey) throw new Error('WhatsApp instance is not configured');
+
+  const path = `/rest/sendMessage/${config.instanceKey}/text`;
   const jid = to.includes('@') ? to : `${to}@s.whatsapp.net`;
   const payload = { messageData: { to: jid, text } };
-  console.log('[WA_SEND]', { path, to: jid });
-  const { data } = await megaApi.post(path, payload);
-  console.log('[WA_SEND_RESPONSE]', data);
+
+  console.log('[WA_SEND]', { path, to: jid, tenantId });
+  try {
+    const { data } = await client.post(path, payload);
+    await upsertIntegrationStatus({ tenantId, integration: 'whatsapp', status: 'connected' });
+    console.log('[WA_SEND_RESPONSE]', data);
+  } catch (error) {
+    await upsertIntegrationStatus({
+      tenantId,
+      integration: 'whatsapp',
+      status: 'error',
+      lastError: error instanceof Error ? error.message : String(error),
+      autoRetry: true,
+    });
+    throw error;
+  }
 }

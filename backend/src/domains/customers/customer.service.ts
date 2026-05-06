@@ -10,10 +10,11 @@ export async function resolveIdentity(
   name?: string,
   tenantId?: string,
 ): Promise<CustomerIdentity> {
+  if (!tenantId) throw new Error('tenantId is required to resolve customer identity');
   const phoneNormalized = normalizePhone(rawPhone);
-  const existing = await findByPhone(phoneNormalized);
+  const existing = await findByPhone(tenantId, phoneNormalized);
 
-  const customer = await upsertByPhone(phoneNormalized, {
+  const customer = await upsertByPhone(tenantId, phoneNormalized, {
     channel_origin: existing ? existing.channel_origin : channel,
     name: name ?? existing?.name,
     external_ids: {
@@ -24,6 +25,7 @@ export async function resolveIdentity(
 
   const identity = {
     id: customer.id,
+    tenantId,
     isNew: !existing,
     phoneNormalized: customer.phone_normalized,
     name: customer.name,

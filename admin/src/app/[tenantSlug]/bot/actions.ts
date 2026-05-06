@@ -11,19 +11,25 @@ async function getTenantId(slug: string): Promise<string> {
   return data.id;
 }
 
-export async function saveBotConfig(slug: string, formData: FormData) {
+export async function publishBotPrompt(slug: string, formData: FormData) {
   const tenantId = await getTenantId(slug);
 
-  const config: Record<string, string> = {
-    'bot.name': formData.get('bot_name') as string,
-    'bot.studio_name': formData.get('studio_name') as string,
-    'bot.tone': formData.get('tone') as string,
-    'bot.welcome_message': formData.get('welcome_message') as string,
-    'bot.handoff_message': formData.get('handoff_message') as string,
-    'rag.content': formData.get('rag_content') as string,
-  };
+  await api.post(`/api/tenants/${tenantId}/prompt/publish`, {
+    fields: {
+      botName: formData.get('bot_name'),
+      studioName: formData.get('studio_name'),
+      tone: formData.get('tone'),
+      welcomeMessage: formData.get('welcome_message'),
+      handoffMessage: formData.get('handoff_message'),
+      extraRules: formData.get('extra_rules'),
+      behaviorNotes: formData.get('behavior_notes'),
+    },
+  });
+  revalidatePath(`/${slug}/bot`);
+}
 
-  await api.patch(`/api/tenants/${tenantId}/config`, config);
-  await api.post(`/api/tenants/${tenantId}/rag/sync`);
+export async function rollbackBotPrompt(slug: string, version: number) {
+  const tenantId = await getTenantId(slug);
+  await api.post(`/api/tenants/${tenantId}/prompt/rollback`, { version });
   revalidatePath(`/${slug}/bot`);
 }

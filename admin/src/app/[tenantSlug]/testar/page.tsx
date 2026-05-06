@@ -25,7 +25,7 @@ export default async function TestarPage({ params }: Props) {
   for (const row of cfgRows ?? []) cfg[row.key] = row.value as string;
 
   return (
-    <div className="space-y-4 max-w-5xl">
+    <div className="w-full space-y-4">
       <header>
         <h1 className="text-2xl font-bold text-gray-900">Testar Bot</h1>
         <p className="text-sm text-gray-500 mt-1">

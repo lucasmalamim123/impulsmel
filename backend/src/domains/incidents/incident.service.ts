@@ -8,8 +8,10 @@ export async function logIncident(
   type: string,
   description: string,
   metadata?: Record<string, unknown>,
+  tenantId?: string,
 ): Promise<void> {
   const { error } = await supabase.from('incidents').insert({
+    tenant_id: tenantId,
     severity,
     type,
     description,
@@ -19,6 +21,6 @@ export async function logIncident(
   if (error) console.error('[incidents] failed to log:', error.message);
 
   if (severity === 'critical' || severity === 'high') {
-    await sendTelegramAlert(`[${severity.toUpperCase()}] ${type}: ${description}`).catch(() => {});
+    await sendTelegramAlert(`[${severity.toUpperCase()}] ${type}: ${description}`, tenantId).catch(() => {});
   }
 }

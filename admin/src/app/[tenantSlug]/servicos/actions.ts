@@ -17,6 +17,7 @@ export async function createServico(slug: string, formData: FormData) {
     name: formData.get('name'),
     price: Number(formData.get('price')) || 0,
     duration_minutes: Number(formData.get('duration_minutes')) || 60,
+    scheduling_mode: formData.get('scheduling_mode') === 'group' ? 'group' : 'individual',
     requires_handoff: formData.get('requires_handoff') === 'on',
   });
   revalidatePath(`/${slug}/servicos`);
@@ -25,5 +26,23 @@ export async function createServico(slug: string, formData: FormData) {
 export async function toggleServico(slug: string, id: string, active: boolean) {
   const tenantId = await getTenantId(slug);
   await api.patch(`/api/tenants/${tenantId}/services/${id}`, { active });
+  revalidatePath(`/${slug}/servicos`);
+}
+
+export async function updateServico(slug: string, id: string, formData: FormData) {
+  const tenantId = await getTenantId(slug);
+  await api.patch(`/api/tenants/${tenantId}/services/${id}`, {
+    name: formData.get('name'),
+    price: Number(formData.get('price')) || 0,
+    duration_minutes: Number(formData.get('duration_minutes')) || 60,
+    scheduling_mode: formData.get('scheduling_mode') === 'group' ? 'group' : 'individual',
+    requires_handoff: formData.get('requires_handoff') === 'on',
+  });
+  revalidatePath(`/${slug}/servicos`);
+}
+
+export async function deleteServico(slug: string, id: string) {
+  const tenantId = await getTenantId(slug);
+  await api.del(`/api/tenants/${tenantId}/services/${id}`);
   revalidatePath(`/${slug}/servicos`);
 }

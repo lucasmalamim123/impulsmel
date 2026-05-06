@@ -22,6 +22,7 @@ export interface ConversationState {
 
 export interface Conversation {
   id: string;
+  tenant_id: string;
   customer_id: string;
   channel: string;
   chatwoot_conversation_id?: string;
