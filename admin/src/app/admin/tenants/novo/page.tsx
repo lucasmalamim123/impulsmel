@@ -1,3 +1,4 @@
+import { ThemeToggle } from '../../../../components/theme/ThemeToggle';
 import { createTenant } from '../actions';
 
 export default function NovoTenantPage({
@@ -6,30 +7,33 @@ export default function NovoTenantPage({
   searchParams: { error?: string };
 }) {
   return (
-    <main className="min-h-screen bg-gray-50 p-8">
-      <div className="max-w-md mx-auto space-y-6">
-        <div>
-          <a href="/admin/tenants" className="text-xs text-gray-400 hover:text-gray-600">
-            ← Voltar
-          </a>
-          <h1 className="text-2xl font-bold text-gray-900 mt-2">Novo Cliente</h1>
+    <main className="min-h-screen bg-[var(--dashboard-bg)] p-8 text-[var(--dashboard-text)]">
+      <div className="mx-auto max-w-md space-y-6">
+        <div className="flex items-start justify-between gap-4">
+          <div>
+            <a href="/admin/tenants" className="text-xs text-gray-400 hover:text-gray-600">
+              ← Voltar
+            </a>
+            <h1 className="mt-2 text-2xl font-bold text-gray-900">Novo Cliente</h1>
+          </div>
+          <ThemeToggle />
         </div>
 
-        <form action={createTenant} className="bg-white rounded-xl shadow-sm p-6 space-y-4">
+        <form action={createTenant} className="space-y-4 rounded-xl bg-white p-6 shadow-sm">
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">
+            <label className="mb-1 block text-sm font-medium text-gray-700">
               Nome do studio
             </label>
             <input
               name="name"
               required
               placeholder="Ex: Studio Fit SP"
-              className="w-full border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+              className="w-full rounded-lg border px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
             />
           </div>
 
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">
+            <label className="mb-1 block text-sm font-medium text-gray-700">
               Slug (URL)
             </label>
             <input
@@ -37,18 +41,18 @@ export default function NovoTenantPage({
               required
               placeholder="Ex: studio-fit-sp"
               pattern="[a-z0-9-]+"
-              className="w-full border rounded-lg px-3 py-2 text-sm font-mono focus:outline-none focus:ring-2 focus:ring-blue-500"
+              className="w-full rounded-lg border px-3 py-2 font-mono text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
             />
-            <p className="text-xs text-gray-400 mt-1">
+            <p className="mt-1 text-xs text-gray-400">
               Apenas letras minúsculas, números e hífens.
             </p>
           </div>
 
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">Plano</label>
+            <label className="mb-1 block text-sm font-medium text-gray-700">Plano</label>
             <select
               name="plan"
-              className="w-full border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+              className="w-full rounded-lg border px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
             >
               <option value="basic">Basic</option>
               <option value="pro">Pro</option>
@@ -57,14 +61,14 @@ export default function NovoTenantPage({
           </div>
 
           {searchParams.error && (
-            <p className="text-sm text-red-600 bg-red-50 px-3 py-2 rounded-lg">
+            <p className="rounded-lg bg-red-50 px-3 py-2 text-sm text-red-600">
               {decodeURIComponent(searchParams.error)}
             </p>
           )}
 
           <button
             type="submit"
-            className="w-full bg-blue-600 text-white rounded-lg py-2 text-sm font-medium hover:bg-blue-700 transition-colors"
+            className="w-full rounded-lg bg-blue-600 py-2 text-sm font-medium text-white transition-colors hover:bg-blue-700"
           >
             Criar cliente
           </button>
