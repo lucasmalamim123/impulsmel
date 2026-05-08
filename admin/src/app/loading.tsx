@@ -1,6 +1,6 @@
 export default function Loading() {
   return (
-    <div className="min-h-screen bg-[#f3f4f6] p-8">
+    <div className="min-h-screen bg-[var(--dashboard-bg)] p-8">
       <div className="mx-auto max-w-6xl space-y-6">
         <div className="space-y-2">
           <div className="loading-skeleton h-4 w-28 rounded" />

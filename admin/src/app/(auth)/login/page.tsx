@@ -2,6 +2,7 @@
 
 import { useState } from 'react';
 import { ImpulsmelMark } from '../../../components/brand/ImpulsmelMark';
+import { ThemeToggle } from '../../../components/theme/ThemeToggle';
 
 export default function LoginPage() {
   const [error, setError] = useState('');
@@ -38,41 +39,44 @@ export default function LoginPage() {
   }
 
   return (
-    <main className="flex min-h-screen items-center justify-center bg-[#1f252b] px-4">
+    <main className="flex min-h-screen items-center justify-center bg-[var(--dashboard-bg)] px-4 text-[var(--dashboard-text)]">
+      <div className="absolute right-5 top-5">
+        <ThemeToggle />
+      </div>
       <div className="w-full max-w-sm space-y-7">
         <div className="text-center">
-          <ImpulsmelMark inverted />
-          <p className="mt-4 text-sm text-white/50">Painel de Administração</p>
+          <ImpulsmelMark />
+          <p className="mt-4 text-sm text-[var(--dashboard-text-muted)]">Painel de Administração</p>
         </div>
 
-        <form onSubmit={handleSubmit} className="rounded-lg border border-white/10 bg-white/[0.06] p-7 space-y-4 shadow-2xl shadow-black/20">
+        <form onSubmit={handleSubmit} className="space-y-4 rounded-lg border border-[var(--dashboard-border)] bg-[var(--dashboard-surface)] p-7 shadow-[var(--dashboard-shadow)]">
           <div>
-            <label className="block text-xs font-semibold text-white/60 mb-1.5">E-mail</label>
+            <label className="mb-1.5 block text-xs font-semibold text-[var(--dashboard-text-muted)]">E-mail</label>
             <input
               type="email"
               name="email"
               required
               autoComplete="email"
               placeholder="seu@email.com"
-              className="w-full bg-white/8 border border-white/10 rounded-lg px-3 py-2.5 text-sm text-white placeholder-white/25 focus:outline-none focus:ring-2 focus:ring-[#d91e2e] focus:border-transparent"
+              className="w-full rounded-lg border px-3 py-2.5 text-sm placeholder:text-[var(--dashboard-text-soft)] focus:outline-none focus:ring-2 focus:ring-[#d91e2e]"
             />
           </div>
 
           <div>
-            <label className="block text-xs font-semibold text-white/60 mb-1.5">Senha</label>
+            <label className="mb-1.5 block text-xs font-semibold text-[var(--dashboard-text-muted)]">Senha</label>
             <input
               type="password"
               name="password"
               required
               autoComplete="current-password"
               placeholder="••••••••"
-              className="w-full bg-white/8 border border-white/10 rounded-lg px-3 py-2.5 text-sm text-white placeholder-white/25 focus:outline-none focus:ring-2 focus:ring-[#d91e2e] focus:border-transparent"
+              className="w-full rounded-lg border px-3 py-2.5 text-sm placeholder:text-[var(--dashboard-text-soft)] focus:outline-none focus:ring-2 focus:ring-[#d91e2e]"
             />
           </div>
 
           {error && (
-            <div className="bg-[#d91e2e]/12 border border-[#d91e2e]/30 rounded-lg px-3 py-2">
-              <p className="text-sm text-white">{error}</p>
+            <div className="rounded-lg border border-[#d91e2e]/30 bg-[#d91e2e]/12 px-3 py-2">
+              <p className="text-sm text-[var(--dashboard-text)]">{error}</p>
             </div>
           )}
 
