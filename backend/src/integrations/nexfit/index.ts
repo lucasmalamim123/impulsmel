@@ -13,6 +13,19 @@ async function createNexfitClient(tenantId: string) {
   });
 }
 
+export async function testNexfitConnection(tenantId: string): Promise<{ ok: true }> {
+  const [apiUrl, apiKey] = await Promise.all([
+    getTenantConfigValue(tenantId, 'nexfit.api_url'),
+    getTenantConfigValue(tenantId, 'nexfit.api_key'),
+  ]);
+  if (!(apiUrl ?? process.env.NEXFIT_API_URL) || !(apiKey ?? process.env.NEXFIT_API_KEY)) {
+    throw new Error('Nexfit config is incomplete');
+  }
+  const client = await createNexfitClient(tenantId);
+  await client.get('/members', { params: { limit: 1 } });
+  return { ok: true };
+}
+
 export async function checkEligibility(customerId: string, tenantId: string): Promise<boolean> {
   const enabled = await getTenantConfigValue(tenantId, 'nexfit.check_eligibility');
   if (!((enabled as unknown) === true || enabled === 'true')) return true;

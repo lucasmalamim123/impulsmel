@@ -96,3 +96,14 @@ export async function assignAgent(conversationId: string, tenantId?: string): Pr
     .post(`/accounts/${config.accountId}/conversations/${conversationId}/assignments`, {})
     .catch(() => {});
 }
+
+export async function testChatwootConnection(tenantId: string): Promise<{ ok: true; accountId: number; inboxId: number; inboxName?: string }> {
+  const { client, config } = await createClient(tenantId);
+  if (!config.apiUrl || !config.apiKey || !config.accountId || !config.inboxId) {
+    throw new Error('Chatwoot config is incomplete');
+  }
+  const { data } = await client
+    .get(`/accounts/${config.accountId}/inboxes/${config.inboxId}`)
+    .catch(e => logChatwootError('inboxes/get', e));
+  return { ok: true, accountId: config.accountId, inboxId: config.inboxId, inboxName: data.name };
+}

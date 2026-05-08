@@ -37,3 +37,17 @@ export async function sendTelegramPhoto(caption: string, photo: string, tenantId
     parse_mode: 'Markdown',
   });
 }
+
+export async function testTelegramConnection(tenantId: string): Promise<{ ok: true; botUsername?: string; chatId: string }> {
+  const config = await getTelegramConfig(tenantId);
+  if (!config.botToken || !config.alertChatId) throw new Error('Telegram config is incomplete');
+
+  const [botRes] = await Promise.all([
+    axios.get(`https://api.telegram.org/bot${config.botToken}/getMe`),
+    axios.get(`https://api.telegram.org/bot${config.botToken}/getChat`, {
+      params: { chat_id: config.alertChatId },
+    }),
+  ]);
+
+  return { ok: true, botUsername: botRes.data?.result?.username, chatId: config.alertChatId };
+}

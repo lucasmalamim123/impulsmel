@@ -2,6 +2,10 @@ import { google } from 'googleapis';
 import { TenantScheduleConfig, getTenantConfigValue } from '../../domains/tenants/tenant.service';
 
 async function createCalendarClient(tenantId?: string) {
+  if (!process.env.GOOGLE_CLIENT_ID || !process.env.GOOGLE_CLIENT_SECRET) {
+    throw new Error('GOOGLE_CLIENT_ID e GOOGLE_CLIENT_SECRET precisam estar configurados no backend.');
+  }
+
   const auth = new google.auth.OAuth2(
     process.env.GOOGLE_CLIENT_ID,
     process.env.GOOGLE_CLIENT_SECRET,
@@ -12,8 +16,57 @@ async function createCalendarClient(tenantId?: string) {
     ? await getTenantConfigValue(tenantId, 'gcal.refresh_token')
     : undefined;
 
-  auth.setCredentials({ refresh_token: refreshToken ?? process.env.GOOGLE_REFRESH_TOKEN });
+  const token = refreshToken ?? process.env.GOOGLE_REFRESH_TOKEN;
+  if (!token) {
+    throw new Error('Refresh token do Google Calendar nao configurado.');
+  }
+
+  auth.setCredentials({ refresh_token: token });
   return google.calendar({ version: 'v3', auth });
+}
+
+function extractGoogleApiError(error: unknown): string {
+  const responseData = (error as { response?: { data?: unknown } })?.response?.data;
+  if (responseData && typeof responseData === 'object') {
+    const data = responseData as { error?: unknown; error_description?: unknown };
+    if (typeof data.error === 'string') {
+      return data.error;
+    }
+    if (typeof data.error_description === 'string') {
+      return data.error_description;
+    }
+  }
+
+  if (error instanceof Error) return error.message;
+  return String(error);
+}
+
+function explainGoogleCalendarError(error: unknown): string {
+  const raw = extractGoogleApiError(error);
+
+  if (raw.includes('deleted_client')) {
+    return [
+      'O Google recusou o OAuth com "deleted_client".',
+      'Isso indica que o OAuth Client ID usado pelo backend foi apagado/desativado no Google Cloud, ou o refresh token foi gerado com um Client ID antigo que nao existe mais.',
+      'Crie ou escolha um OAuth Client ID ativo no Google Cloud, atualize GOOGLE_CLIENT_ID e GOOGLE_CLIENT_SECRET no backend, gere um novo refresh token no OAuth Playground usando essas mesmas credenciais e salve novamente a integracao.',
+    ].join(' ');
+  }
+
+  if (raw.includes('invalid_grant')) {
+    return [
+      'O refresh token do Google Calendar foi recusado.',
+      'Gere um novo refresh token no OAuth Playground usando o mesmo GOOGLE_CLIENT_ID/GOOGLE_CLIENT_SECRET do backend, com Access type Offline e scope https://www.googleapis.com/auth/calendar.',
+    ].join(' ');
+  }
+
+  if (raw.includes('invalid_client') || raw.includes('unauthorized_client')) {
+    return [
+      'As credenciais OAuth do Google Calendar nao batem com o refresh token.',
+      'Confira GOOGLE_CLIENT_ID e GOOGLE_CLIENT_SECRET no backend e gere o refresh token novamente usando exatamente essas credenciais.',
+    ].join(' ');
+  }
+
+  return raw;
 }
 
 const TZ_OFFSET_MS = -3 * 60 * 60 * 1000;
@@ -284,6 +337,19 @@ export async function checkSlotAvailability(
   });
 
   return (data.calendars?.[calendarId]?.busy ?? []).length === 0;
+}
+
+export async function testGoogleCalendarConnection(
+  tenantId: string,
+  calendarId = 'primary',
+): Promise<{ ok: true; calendarId: string; summary?: string }> {
+  try {
+    const calendar = await createCalendarClient(tenantId);
+    const { data } = await calendar.calendars.get({ calendarId });
+    return { ok: true, calendarId: data.id ?? calendarId, summary: data.summary ?? undefined };
+  } catch (error) {
+    throw new Error(explainGoogleCalendarError(error));
+  }
 }
 
 export async function createEvent(params: {

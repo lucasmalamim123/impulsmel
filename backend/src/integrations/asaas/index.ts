@@ -74,3 +74,17 @@ export async function createCharge(params: {
 
   return { id: data.id as string, invoiceUrl: data.invoiceUrl as string | undefined };
 }
+
+export async function testAsaasConnection(tenantId: string): Promise<{ ok: true; environment: string; apiUrl: string }> {
+  const [apiUrl, environment] = await Promise.all([
+    getTenantConfigValue(tenantId, 'asaas.api_url'),
+    getTenantConfigValue(tenantId, 'asaas.environment'),
+  ]);
+  const client = await createAsaasClient(tenantId);
+  await client.get('/customers', { params: { limit: 1 } });
+  return {
+    ok: true,
+    environment: environment ?? 'sandbox',
+    apiUrl: apiUrl ?? (environment === 'production' ? 'https://api.asaas.com/v3' : 'https://sandbox.asaas.com/api/v3'),
+  };
+}

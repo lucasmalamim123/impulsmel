@@ -1,10 +1,16 @@
 import { FastifyInstance } from 'fastify';
 import { supabase } from '../../lib/supabase';
 import { getInstanceStatus, getQrCode } from '../../integrations/megaapi';
+import { testGoogleCalendarConnection } from '../../integrations/google-calendar';
+import { testChatwootConnection } from '../../integrations/chatwoot';
+import { testNotionConnection } from '../../integrations/notion';
+import { testNexfitConnection } from '../../integrations/nexfit';
+import { testTelegramConnection } from '../../integrations/telegram';
+import { testAsaasConnection } from '../../integrations/asaas';
 import { syncRagContentToVectors } from '../../domains/ai/rag.service';
 import { runSimulatedChat } from '../../domains/ai/simulator.service';
 import { ConversationState } from '../../domains/conversations/conversation.types';
-import { getSanitizedTenantConfig, setTenantConfig } from '../../domains/tenants/tenant.service';
+import { getSanitizedTenantConfig, setTenantConfig, getTenantConfigValue } from '../../domains/tenants/tenant.service';
 import { upsertIntegrationStatus } from '../../domains/operational/operational.service';
 
 type PeriodKey = 'today' | 'yesterday' | 'this_month' | 'last_month' | 'custom';
@@ -556,6 +562,71 @@ export async function adminApiRoutes(app: FastifyInstance): Promise<void> {
         autoRetry: true,
       });
       return reply.status(503).send({ connected: false, error: String(err) });
+    }
+  });
+
+  app.post('/api/tenants/:id/integrations/:integration/test', async (req, reply) => {
+    const { id, integration } = req.params as { id: string; integration: string };
+
+    try {
+      let result: unknown;
+      if (integration === 'whatsapp') {
+        result = await getInstanceStatus(id);
+      } else if (integration === 'gcal') {
+        const calendarId = await getTenantConfigValue(id, 'gcal.calendar_id');
+        result = await testGoogleCalendarConnection(id, calendarId ?? 'primary');
+      } else if (integration === 'chatwoot') {
+        result = await testChatwootConnection(id);
+      } else if (integration === 'notion') {
+        result = await testNotionConnection(id);
+      } else if (integration === 'nexfit') {
+        result = await testNexfitConnection(id);
+      } else if (integration === 'telegram') {
+        result = await testTelegramConnection(id);
+      } else if (integration === 'asaas') {
+        result = await testAsaasConnection(id);
+      } else if (integration === 'canais') {
+        const [instagramEnabled, messengerEnabled, tiktokEnabled] = await Promise.all([
+          getTenantConfigValue(id, 'feature.instagram_enabled'),
+          getTenantConfigValue(id, 'feature.messenger_enabled'),
+          getTenantConfigValue(id, 'feature.tiktok_enabled'),
+        ]);
+        result = {
+          ok: true,
+          enabledChannels: {
+            instagram: instagramEnabled === 'true' || (instagramEnabled as unknown) === true,
+            messenger: messengerEnabled === 'true' || (messengerEnabled as unknown) === true,
+            tiktok: tiktokEnabled === 'true' || (tiktokEnabled as unknown) === true,
+          },
+        };
+      } else {
+        return reply.status(404).send({ ok: false, error: 'Unknown integration' });
+      }
+
+      await upsertIntegrationStatus({
+        tenantId: id,
+        integration,
+        status: integration === 'whatsapp' && (result as { connected?: boolean }).connected === false
+          ? 'disconnected'
+          : 'connected',
+        metadata: { testResult: result },
+      });
+
+      return reply.send({
+        ok: true,
+        message: 'Integração validada com sucesso.',
+        result,
+      });
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err);
+      await upsertIntegrationStatus({
+        tenantId: id,
+        integration,
+        status: 'error',
+        lastError: message,
+        autoRetry: false,
+      });
+      return reply.status(400).send({ ok: false, error: message });
     }
   });
 

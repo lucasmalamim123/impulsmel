@@ -54,3 +54,22 @@ export async function createLeadInNotionIfEnabled(
     },
   } as Parameters<typeof notion.pages.create>[0]);
 }
+
+export async function testNotionConnection(tenantId: string): Promise<{ ok: true; checkedDatabases: string[] }> {
+  const [token, ragDatabaseId, leadsDatabaseId] = await Promise.all([
+    getTenantConfigValue(tenantId, 'notion.token'),
+    getTenantConfigValue(tenantId, 'notion.database_id'),
+    getTenantConfigValue(tenantId, 'notion.leads_database_id'),
+  ]);
+
+  if (!token) throw new Error('Notion token is not configured');
+  const databaseIds = [ragDatabaseId, leadsDatabaseId].filter(Boolean) as string[];
+  if (!databaseIds.length) throw new Error('No Notion database id configured');
+
+  const notion = new Client({ auth: token });
+  for (const databaseId of databaseIds) {
+    await notion.databases.retrieve({ database_id: databaseId });
+  }
+
+  return { ok: true, checkedDatabases: databaseIds };
+}
