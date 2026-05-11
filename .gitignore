@@ -28,3 +28,7 @@ Thumbs.db
 # Editor
 .vscode/
 .idea/
+
+# Ferramentas locais / IA
+.claude/
+CLAUDE.md
